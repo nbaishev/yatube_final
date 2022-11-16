@@ -38,6 +38,7 @@ class PostURLTests(TestCase):
         self.authorized_client.force_login(self.user)
         self.author_client = Client()
         self.author_client.force_login(self.author)
+        cache.clear()
 
     def test_urls_exists_at_desired_location(self):
         """Страницы доступны пользователям."""
@@ -83,7 +84,6 @@ class PostURLTests(TestCase):
 
     def test_urls_uses_correct_template(self):
         """URL-адрес использует соответствующий шаблон."""
-        cache.clear()
         templates_url_names = {
             '/': 'posts/index.html',
             '/create/': 'posts/create_post.html',

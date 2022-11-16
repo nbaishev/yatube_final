@@ -8,6 +8,7 @@
 {% endblock %}
 
 {% block content %}
+<div class="mb-5">
   <h3>Всего постов: {{ author.posts.count }}</h3>
   {% if following %}
     <a
@@ -27,5 +28,6 @@
   {% for post in page_obj %}
     {% include 'includes/article.html' with group_reference_flag=True %}
 {% endfor %}
-{% include 'posts/includes/paginator.html' %} 
+</div>
+{% include 'posts/includes/paginator.html' %}
 {% endblock %}

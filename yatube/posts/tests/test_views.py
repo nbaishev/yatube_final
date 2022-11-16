@@ -10,7 +10,7 @@ from django.urls import reverse
 from django import forms
 
 from posts.forms import PostForm
-from posts.models import Group, Post, User
+from posts.models import Follow, Group, Post, User
 
 TEMP_MEDIA_ROOT = tempfile.mkdtemp(dir=settings.BASE_DIR)
 
@@ -60,6 +60,7 @@ class PostPagesTests(TestCase):
     def setUp(self):
         self.authorized_client = Client()
         self.authorized_client.force_login(self.user)
+        cache.clear()
 
     def post_exist(self, response, group=False):
         if 'page_obj' in response.context:
@@ -83,7 +84,6 @@ class PostPagesTests(TestCase):
 
     def test_pages_uses_correct_template(self):
         """URL-адрес использует соответствующий шаблон."""
-        cache.clear()
         templates_pages_names = {
             reverse('posts:index'): 'posts/index.html',
             reverse('posts:group_list',
@@ -107,7 +107,6 @@ class PostPagesTests(TestCase):
 
     def test_index_page_show_correct_context(self):
         """Шаблон index сформирован с правильным контекстом."""
-        # sleep(20)
         response = self.authorized_client.get(reverse('posts:index'))
         self.post_exist(response)
 
@@ -242,3 +241,78 @@ class PaginatorViewsTest(TestCase):
                 self.posts[self.ALL_POSTS_COUNT_FOR_TEST - 1
                            - settings.POSTS_PER_PAGE].text
             )
+
+
+class FollowTests(TestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.author = User.objects.create_user(username='Author')
+        cls.follower = User.objects.create_user(username='Follower')
+        cls.user = User.objects.create_user(username='Unfollower')
+        cls.post = Post.objects.create(
+            author=cls.author,
+            text='Тестовый пост',
+        )
+
+    def setUp(self):
+        self.author_client = Client()
+        self.author_client.force_login(self.author)
+        self.follower_client = Client()
+        self.follower_client.force_login(self.follower)
+        self.authorized_client = Client()
+        self.authorized_client.force_login(self.user)
+
+    def test_authorized_client_follow_unfollow(self):
+        """Авторизованный пользователь может подписаться
+        и отписаться от автора.
+        """
+        follow_count = Follow.objects.count()
+        response = self.authorized_client.post(
+            reverse('posts:profile_follow', args={self.author})
+        )
+        self.assertRedirects(
+            response,
+            reverse('posts:profile', args={self.author})
+        )
+        self.assertEqual(
+            Follow.objects.count(), follow_count + 1
+        )
+        self.assertTrue(
+            Follow.objects.filter(author__following__user=self.user).exists()
+        )
+        response = self.authorized_client.post(
+            reverse('posts:profile_unfollow', args={self.author})
+        )
+        self.assertRedirects(
+            response,
+            reverse('posts:profile', args={self.author})
+        )
+        self.assertEqual(
+            Follow.objects.count(), follow_count
+        )
+        self.assertFalse(
+            Follow.objects.filter(author__following__user=self.user).exists()
+        )
+
+    def test_following_unfollowing_posts(self):
+        """Новая запись пользователя появляется в ленте тех,
+        кто на него подписан и не появляется в ленте тех,
+        кто не подписан.
+        """
+        new_post = Post.objects.create(
+            author=self.author,
+            text='Только для подписчиков',
+        )
+        self.follower_client.post(
+            reverse('posts:profile_follow', args={self.author})
+        )
+        response_1 = self.follower_client.get(
+            reverse('posts:follow_index')
+        )
+        first_post_1 = response_1.context['page_obj'][0]
+        self.assertTrue(first_post_1 == new_post)
+        response_2 = self.authorized_client.get(
+            reverse('posts:follow_index')
+        )
+        self.assertTrue(len(response_2.context['page_obj']) == 0)
