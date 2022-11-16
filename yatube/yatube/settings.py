@@ -126,6 +126,7 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 POSTS_PER_PAGE: int = 10
 NUMBER_OF_CHARACTERS_IN_TEXT_OF_POST = 15
+FORBIDDEN_WORDS = ('блин', 'фига', 'гугл',)
 
 CACHES = {
     'default': {

@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import models
+from django.db.models.constraints import UniqueConstraint
 
 from core.models import CreatedModel
 
@@ -128,3 +129,7 @@ class Follow(CreatedModel):
         verbose_name = 'Подписка'
         verbose_name_plural = 'Подписки'
         ordering = ('-created',)
+        UniqueConstraint(
+            fields=['user', 'author'],
+            name='unique_follow'
+        )

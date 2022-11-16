@@ -2,12 +2,12 @@ import shutil
 import tempfile
 from time import sleep
 
+from django import forms
 from django.conf import settings
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
-from django import forms
 
 from posts.forms import PostForm
 from posts.models import Follow, Group, Post, User
@@ -184,12 +184,13 @@ class PostPagesTests(TestCase):
         self.assertNotEqual(response_content_2, response_content_3)
 
 
-class PaginatorViewsTest(TestCase):
+class PaginatorViewsTests(TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
         cls.ALL_POSTS_COUNT_FOR_TEST = 13
         cls.user = User.objects.create_user(username='TestUser')
+        cls.author = User.objects.create_user(username='Author')
         cls.group = Group.objects.create(
             title='Тестовая группа',
             slug='test-slug',
@@ -198,7 +199,7 @@ class PaginatorViewsTest(TestCase):
         paginator_objects = []
         for i in range(cls.ALL_POSTS_COUNT_FOR_TEST):
             new_post = Post(
-                author=cls.user,
+                author=cls.author,
                 text=f'Тестовый пост №{i}',
                 group=cls.group,
             )
@@ -206,19 +207,28 @@ class PaginatorViewsTest(TestCase):
             paginator_objects.append(new_post)
         cls.posts = Post.objects.bulk_create(paginator_objects)
 
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+        shutil.rmtree(TEMP_MEDIA_ROOT, ignore_errors=True)
+
     def setUp(self):
         self.authorized_client = Client()
         self.authorized_client.force_login(self.user)
+        cache.clear()
 
     def test_paginator_correct_context(self):
         """Проверка работы пагинатора."""
+        self.authorized_client.post(
+            reverse('posts:profile_follow', args={self.author})
+        )
         urls_with_paginator = [
             reverse('posts:index'),
             reverse('posts:group_list', args={self.group.slug}),
-            reverse('posts:profile', args={self.user}),
+            reverse('posts:profile', args={self.author}),
+            reverse('posts:follow_index'),
         ]
         for address in urls_with_paginator:
-            cache.clear()
             response_1 = self.authorized_client.get(address)
             response_2 = self.authorized_client.get(
                 address + '?page=2'
@@ -255,6 +265,11 @@ class FollowTests(TestCase):
             text='Тестовый пост',
         )
 
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+        shutil.rmtree(TEMP_MEDIA_ROOT, ignore_errors=True)
+
     def setUp(self):
         self.author_client = Client()
         self.author_client.force_login(self.author)
@@ -263,9 +278,9 @@ class FollowTests(TestCase):
         self.authorized_client = Client()
         self.authorized_client.force_login(self.user)
 
-    def test_authorized_client_follow_unfollow(self):
+    def test_authorized_client_follow(self):
         """Авторизованный пользователь может подписаться
-        и отписаться от автора.
+        на автора.
         """
         follow_count = Follow.objects.count()
         response = self.authorized_client.post(
@@ -281,6 +296,15 @@ class FollowTests(TestCase):
         self.assertTrue(
             Follow.objects.filter(author__following__user=self.user).exists()
         )
+
+    def test_authorized_client_unfollow(self):
+        """Авторизованный пользователь может
+        отписаться от автора.
+        """
+        follow_count = Follow.objects.count()
+        response = self.authorized_client.post(
+            reverse('posts:profile_follow', args={self.author})
+        )
         response = self.authorized_client.post(
             reverse('posts:profile_unfollow', args={self.author})
         )
@@ -295,10 +319,9 @@ class FollowTests(TestCase):
             Follow.objects.filter(author__following__user=self.user).exists()
         )
 
-    def test_following_unfollowing_posts(self):
+    def test_following_posts(self):
         """Новая запись пользователя появляется в ленте тех,
-        кто на него подписан и не появляется в ленте тех,
-        кто не подписан.
+        кто на него подписан.
         """
         new_post = Post.objects.create(
             author=self.author,
@@ -307,12 +330,25 @@ class FollowTests(TestCase):
         self.follower_client.post(
             reverse('posts:profile_follow', args={self.author})
         )
-        response_1 = self.follower_client.get(
+        response = self.follower_client.get(
             reverse('posts:follow_index')
         )
-        first_post_1 = response_1.context['page_obj'][0]
-        self.assertTrue(first_post_1 == new_post)
-        response_2 = self.authorized_client.get(
+        first_post = response.context['page_obj'][0]
+        self.assertTrue(first_post == new_post)
+
+    def test_unfollowing_posts(self):
+        """Новая запись пользователя
+        не появляется в ленте тех,
+        кто не подписан.
+        """
+        Post.objects.create(
+            author=self.author,
+            text='Только для подписчиков',
+        )
+        self.follower_client.post(
+            reverse('posts:profile_follow', args={self.author})
+        )
+        response = self.authorized_client.get(
             reverse('posts:follow_index')
         )
-        self.assertTrue(len(response_2.context['page_obj']) == 0)
+        self.assertTrue(len(response.context['page_obj']) == 0)

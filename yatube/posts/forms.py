@@ -1,4 +1,5 @@
 from django import forms
+from django.conf import settings
 
 from .models import Comment, Post
 
@@ -29,8 +30,7 @@ class PostForm(forms.ModelForm):
 
     def clean_text(self):
         post_text = self.cleaned_data['text']
-        forbidden_words = ('блин', 'фига', 'гугл')
-        for word in forbidden_words:
+        for word in settings.FORBIDDEN_WORDS:
             if word in post_text.lower():
                 raise forms.ValidationError(f'Слово {word} запрещено')
         return post_text
@@ -57,8 +57,7 @@ class CommentForm(forms.ModelForm):
 
     def clean_text(self):
         comment_text = self.cleaned_data['text']
-        forbidden_words = ('блин', 'фига', 'гугл')
-        for word in forbidden_words:
+        for word in settings.FORBIDDEN_WORDS:
             if word in comment_text.lower():
                 raise forms.ValidationError(f'Слово {word} запрещено')
         return comment_text
