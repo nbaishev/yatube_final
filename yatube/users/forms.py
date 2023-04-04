@@ -1,3 +1,4 @@
+from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import UserCreationForm
 from django.core.exceptions import ValidationError
@@ -7,6 +8,8 @@ User = get_user_model()
 
 class CreationForm(UserCreationForm):
     """Форма создания нового автора."""
+
+    email = forms.EmailField(max_length=200, help_text='Required')
 
     class Meta(UserCreationForm.Meta):
         model = User
